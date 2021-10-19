@@ -16,39 +16,19 @@ contract Library{
       uint numOfCoppies;
     }
 
-    address private m_owner;
-    uint private m_totalBooks = 0; // used for giving unique book ids
-    uint[] private m_allBookIds; 
-    mapping(address => bool) private m_bookBorrowers;
-    mapping(uint => Book) private m_books;
-    mapping(string => uint) private m_bookIds;
+    address     private m_owner;
+    uint        private m_totalBooks = 0; // used for giving unique book ids
+    uint[]      private m_allBookIds; 
+    mapping(address => uint)    private m_booksBorrowed;
+    mapping(uint => Book)       private m_books;
+    mapping(string => uint)     private m_bookIds;
+    mapping(uint => mapping(address => bool)) private m_allBorrows;
 
     constructor() {
         m_owner = msg.sender;
     }
 
     // PUBLIC
-
-    function borrowBook(uint bookId) public {
-        assert(bookId > 0);
-
-        Book memory book = m_books[bookId];
-        require(book.id != 0);
-        require(book.numOfCoppies > 0);
-        require(!m_bookBorrowers[msg.sender]);
-
-        book.numOfCoppies--;
-        m_bookBorrowers[msg.sender] = true;
-
-        // which book is borrowed ? 
-    }
-
-    function returnBook() public {
-        m_bookBorrowers[msg.sender] = false;
-        // which book is returned
-    }
-
-
     // Adds a new copy of a book. If book does not exist it will be created. Returns id of the book.
     function addBookCopy(string memory bookName) public returns (uint){
         require(msg.sender == m_owner);
@@ -66,6 +46,44 @@ contract Library{
     function checkNumberOfCopies(uint bookId) public view returns (uint){
         return m_books[bookId].numOfCoppies;
     }
+
+    function getAllBooks() public view returns (Book[] memory){
+        uint arrLen = m_allBookIds.length;
+        Book[] memory books = new Book[](arrLen);
+        
+        for(uint i = 0; i < m_allBookIds.length; i++){
+            uint id = m_allBookIds[i];
+            books[i] = m_books[id];
+        }
+        return books;
+    }
+
+    function allAddressesBorrowedBook() public view returns (uint[]) {
+        uint[] arr = new uint[]();
+
+    function borrowBook(uint bookId) public {
+        assert(bookId > 0);
+        assert(m_booksBorrowed[msg.sender] == 0);
+
+        Book memory book = m_books[bookId];
+        require(book.id != 0);
+        require(book.numOfCoppies > 0);
+  
+        book.numOfCoppies--;
+        m_booksBorrowed[msg.sender] = book.id;
+        m_allBorrows[book.id][msg.sender] = true;
+    }
+
+    function returnBook() public {
+        uint bookBorrowed = m_booksBorrowed[msg.sender];
+        require(bookBorrowed > 0);
+        Book memory book = m_books[bookBorrowed];
+        require(book.id > 0);
+
+        book.numOfCoppies++;
+        m_booksBorrowed[msg.sender] = 0;
+    }
+
 
     // PRIVATE
     function _addNewBook(string memory bookName) private {
