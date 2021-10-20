@@ -18,7 +18,7 @@ contract Library{
     address     private m_owner;
     uint        private m_totalBooks = 0; // used for giving unique book ids
     uint[]      private m_allBookIds; 
-    mapping(address => uint)    private m_bookBorrowed;
+    mapping(address => mapping(uint => bool))    private m_bookBorrowed;
     mapping(uint => Book)       private m_books;
     mapping(string => uint)     private m_bookIds;
     mapping(uint => IterableMapping.Map) private m_allBorrows;
@@ -28,7 +28,9 @@ contract Library{
     }
 
     // PUBLIC
-    // Adds a new copy of a book. If book does not exist it will be created. Returns id of the book.
+
+    // Adds a new copy of a book. If book does not exist it will be created. 
+    // Returns the id of the book.
     function addBookCopy(string memory bookName) public returns (uint){
         require(msg.sender == m_owner);
         
@@ -43,7 +45,8 @@ contract Library{
     }
 
     function checkNumberOfCopies(uint bookId) public view returns (uint){
-        return m_books[bookId].numOfCoppies;
+        Book memory book = _getBook(bookId);
+        return book.numOfCoppies;
     }
 
     function getAllBooks() public view returns (Book[] memory){
@@ -70,30 +73,34 @@ contract Library{
     }
 
     function borrowBook(uint bookId) public {
-        assert(bookId > 0);
-        assert(m_bookBorrowed[msg.sender] == 0);
-
-        Book memory book = m_books[bookId];
-        require(book.id != 0);
+        Book memory book = _getBook(bookId);
         require(book.numOfCoppies > 0);
+
+        assert(!m_bookBorrowed[msg.sender][book.id]);
   
         book.numOfCoppies--;
-        m_bookBorrowed[msg.sender] = book.id;
+        m_bookBorrowed[msg.sender][book.id] = true;
         m_allBorrows[book.id].set(msg.sender, true); 
     }
 
-    function returnBook() public {
-        uint bookId = m_bookBorrowed[msg.sender];
-        require(bookId > 0);
-        Book memory book = m_books[bookId];
-        require(book.id > 0);
+    function returnBook(uint bookId) public {
+        Book memory book = _getBook(bookId);
+        require(book.numOfCoppies > 0);
+
+        assert(m_bookBorrowed[msg.sender][book.id]);
 
         book.numOfCoppies++;
-        m_bookBorrowed[msg.sender] = 0;
+        m_bookBorrowed[msg.sender][book.id] = false;
     }
 
-
     // PRIVATE
+    function _getBook(uint bookId) private view returns (Book memory){
+        assert(bookId > 0);
+        Book memory book = m_books[bookId];
+        require(book.id != 0);
+        return book;
+    }
+
     function _addNewBook(string memory bookName) private {
         uint bookId = m_totalBooks++;
         Book memory newBook = Book(bookId, bookName, 0);
@@ -101,7 +108,7 @@ contract Library{
         m_bookIds[bookName] = bookId;
         m_allBookIds.push(bookId);
     }
-    
+
     function _bookExists(string memory bookName) private view returns (bool) {
         
         if (m_bookIds[bookName] == 0) {
@@ -110,8 +117,6 @@ contract Library{
         return true;
     }
 }
-
-
 
 library IterableMapping {
     // Iterable mapping from address to uint;
