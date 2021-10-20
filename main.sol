@@ -1,5 +1,4 @@
 // - The administrator (owner) of the library should be able to add new books and the number of copies in the library.
-
 // - Users should be able to see the available books and borrow them by their id.
 // - Users should be able to return books.
 // - A user should not borrow more than one copy of a book at a time. The users should not be able to borrow a book more times than the copies in the libraries unless copy is returned.
@@ -7,8 +6,8 @@
 
 pragma solidity >=0.7.0 < 0.9.0;
 
-
 contract Library{
+    using IterableMapping for IterableMapping.Map;
 
     struct Book { 
       uint id;
@@ -19,10 +18,10 @@ contract Library{
     address     private m_owner;
     uint        private m_totalBooks = 0; // used for giving unique book ids
     uint[]      private m_allBookIds; 
-    mapping(address => uint)    private m_booksBorrowed;
+    mapping(address => uint)    private m_bookBorrowed;
     mapping(uint => Book)       private m_books;
     mapping(string => uint)     private m_bookIds;
-    mapping(uint => mapping(address => bool)) private m_allBorrows;
+    mapping(uint => IterableMapping.Map) private m_allBorrows;
 
     constructor() {
         m_owner = msg.sender;
@@ -58,30 +57,39 @@ contract Library{
         return books;
     }
 
-    function allAddressesBorrowedBook() public view returns (uint[]) {
-        uint[] arr = new uint[]();
+    function allAddressesBorrowedBook(uint bookId) public view returns (address[] memory) {
+        IterableMapping.Map storage map = m_allBorrows[bookId];
+        uint mapLen = map.size();
+        address[] memory result = new address[](mapLen);
+
+        for (uint i = 0; i < mapLen; i++) {
+            address addr = map.getKeyAtIndex(i);
+            result[i] = addr;
+        }
+        return result;
+    }
 
     function borrowBook(uint bookId) public {
         assert(bookId > 0);
-        assert(m_booksBorrowed[msg.sender] == 0);
+        assert(m_bookBorrowed[msg.sender] == 0);
 
         Book memory book = m_books[bookId];
         require(book.id != 0);
         require(book.numOfCoppies > 0);
   
         book.numOfCoppies--;
-        m_booksBorrowed[msg.sender] = book.id;
-        m_allBorrows[book.id][msg.sender] = true;
+        m_bookBorrowed[msg.sender] = book.id;
+        m_allBorrows[book.id].set(msg.sender, true); 
     }
 
     function returnBook() public {
-        uint bookBorrowed = m_booksBorrowed[msg.sender];
-        require(bookBorrowed > 0);
-        Book memory book = m_books[bookBorrowed];
+        uint bookId = m_bookBorrowed[msg.sender];
+        require(bookId > 0);
+        Book memory book = m_books[bookId];
         require(book.id > 0);
 
         book.numOfCoppies++;
-        m_booksBorrowed[msg.sender] = 0;
+        m_bookBorrowed[msg.sender] = 0;
     }
 
 
@@ -100,5 +108,63 @@ contract Library{
             return false;
         }
         return true;
+    }
+}
+
+
+
+library IterableMapping {
+    // Iterable mapping from address to uint;
+    struct Map {
+        address[] keys;
+        mapping(address => bool) values;
+        mapping(address => uint) indexOf;
+        mapping(address => bool) inserted;
+    }
+
+    function get(Map storage map, address key) public view returns (bool) {
+        return map.values[key];
+    }
+
+    function getKeyAtIndex(Map storage map, uint index) public view returns (address) {
+        return map.keys[index];
+    }
+
+    function size(Map storage map) public view returns (uint) {
+        return map.keys.length;
+    }
+
+    function set(
+        Map storage map,
+        address key,
+        bool val
+    ) public {
+        if (map.inserted[key]) {
+            map.values[key] = val;
+        } else {
+            map.inserted[key] = true;
+            map.values[key] = val;
+            map.indexOf[key] = map.keys.length;
+            map.keys.push(key);
+        }
+    }
+
+    function remove(Map storage map, address key) public {
+        if (!map.inserted[key]) {
+            return;
+        }
+
+        delete map.inserted[key];
+        delete map.values[key];
+
+        uint index = map.indexOf[key];
+        uint lastIndex = map.keys.length - 1;
+        address lastKey = map.keys[lastIndex];
+
+        map.indexOf[lastKey] = index;
+        delete map.indexOf[key];
+
+        map.keys[index] = lastKey;
+        map.keys.pop();
     }
 }
